@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crossplane_function_sdk::proto::v1::{
-    Capability, RunFunctionRequest, RunFunctionResponse, Severity,
+    Capability, Ready, RunFunctionRequest, RunFunctionResponse, Severity, Target,
 };
-use crossplane_function_sdk::{request, resource, response};
+use crossplane_function_sdk::{Error, context, request, resource, response};
 
 fn fixture() -> RunFunctionRequest {
     serde_json::from_str(
@@ -57,15 +57,66 @@ fn response_to_copies_tag_desired_and_context() {
 }
 
 #[test]
-fn results_carry_severity() {
+fn results_carry_severity_and_default_target() {
     let mut rsp = RunFunctionResponse::default();
-    response::normal(&mut rsp, "all good");
+    response::normal(&mut rsp, "all good").reason = Some("AllGood".to_string());
+    let warning = response::warning(&mut rsp, "hmm");
+    warning.target = Some(Target::CompositeAndClaim as i32);
     response::fatal(&mut rsp, "boom");
 
-    assert_eq!(rsp.results.len(), 2);
+    assert_eq!(rsp.results.len(), 3);
     assert_eq!(rsp.results[0].severity, Severity::Normal as i32);
-    assert_eq!(rsp.results[1].severity, Severity::Fatal as i32);
-    assert_eq!(rsp.results[1].message, "boom");
+    assert_eq!(rsp.results[0].reason.as_deref(), Some("AllGood"));
+    assert_eq!(rsp.results[0].target, Some(Target::Composite as i32));
+    assert_eq!(
+        rsp.results[1].target,
+        Some(Target::CompositeAndClaim as i32)
+    );
+    assert_eq!(rsp.results[2].severity, Severity::Fatal as i32);
+    assert_eq!(rsp.results[2].message, "boom");
+}
+
+#[test]
+fn get_input_deserializes_typed_input() {
+    #[derive(serde::Deserialize)]
+    struct Input {
+        version: String,
+    }
+
+    let input: Input = request::get_input(&fixture()).unwrap();
+    assert_eq!(input.version, "v1beta2");
+
+    let missing = request::get_input::<Input>(&RunFunctionRequest::default());
+    assert!(matches!(missing, Err(Error::MissingInput)));
+}
+
+#[test]
+fn context_keys_read_and_write() {
+    let req = fixture();
+    let environment = request::get_context_key(&req, context::KEY_ENVIRONMENT).unwrap();
+    assert_eq!(environment["key"], "value");
+    assert_eq!(request::get_context_key(&req, "nope"), None);
+
+    let mut rsp = response::to(&req, response::DEFAULT_TTL);
+    response::set_context_key(&mut rsp, "example.org/mine", &serde_json::json!({"a": 1})).unwrap();
+
+    // The context copied forward from the request is preserved.
+    let fields = &rsp.context.as_ref().unwrap().fields;
+    assert!(fields.contains_key(context::KEY_ENVIRONMENT));
+    assert!(fields.contains_key("example.org/mine"));
+}
+
+#[test]
+fn set_ready_and_connection_details() {
+    let mut r = crossplane_function_sdk::proto::v1::Resource::default();
+    resource::set_ready(&mut r, Ready::True);
+    resource::add_connection_detail(&mut r, "endpoint", "https://example.org");
+
+    assert_eq!(r.ready, Ready::True as i32);
+    assert_eq!(
+        r.connection_details["endpoint"],
+        b"https://example.org".to_vec()
+    );
 }
 
 #[test]

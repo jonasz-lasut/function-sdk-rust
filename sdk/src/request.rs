@@ -1,10 +1,30 @@
 //! Helpers for working with RunFunctionRequests.
 
+use crate::Error;
 use crate::proto::v1::{Capability, CredentialData, RunFunctionRequest, credentials};
-use crate::resource::struct_to_json;
+use crate::resource::{pb_to_json, struct_to_json};
 
 /// The requirement name a WatchOperation uses to inject the watched resource.
 pub const WATCHED_RESOURCE_KEY: &str = "ops.crossplane.io/watched-resource";
+
+/// Gets the function's input from the request as a typed value.
+///
+/// Input is the function-defined config from the Composition's
+/// `spec.pipeline[].input` block. Crossplane never validates it, so
+/// functions must - deserializing into a typed struct is the first line of
+/// that validation. Returns [`Error::MissingInput`] when the pipeline step
+/// has no input at all.
+pub fn get_input<T: serde::de::DeserializeOwned>(req: &RunFunctionRequest) -> Result<T, Error> {
+    let input = req.input.as_ref().ok_or(Error::MissingInput)?;
+    Ok(serde_json::from_value(struct_to_json(input))?)
+}
+
+/// Gets a function context value by key, if present.
+///
+/// See [`crate::context`] for well-known context keys.
+pub fn get_context_key(req: &RunFunctionRequest, key: &str) -> Option<serde_json::Value> {
+    req.context.as_ref()?.fields.get(key).map(pb_to_json)
+}
 
 /// Gets required resources by requirement name from the request.
 ///

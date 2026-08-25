@@ -14,6 +14,7 @@
 //!
 //! [`FunctionRunnerService`]: proto::v1::function_runner_service_server::FunctionRunnerService
 
+pub mod context;
 pub mod logging;
 pub mod proto;
 pub mod request;
@@ -26,13 +27,17 @@ pub use server::{Args, serve};
 /// Errors returned by the SDK.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// A source could not be serialized to JSON.
-    #[error("cannot serialize source to JSON: {0}")]
-    Serialize(#[from] serde_json::Error),
+    /// A JSON conversion failed.
+    #[error("JSON conversion failed: {0}")]
+    Json(#[from] serde_json::Error),
 
     /// A source serialized to a JSON value that is not an object.
     #[error("source must serialize to a JSON object")]
     NotAnObject,
+
+    /// The request has no function input.
+    #[error("the request has no function input")]
+    MissingInput,
 
     /// The listen address could not be parsed.
     #[error("cannot parse listen address: {0}")]
