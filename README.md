@@ -85,11 +85,13 @@ with a few deliberate differences:
   resources in `composite.Unstructured`/`composed.Unstructured` with
   fieldpath accessors (`GetString("spec.region")`) and Crossplane machinery
   accessors, built on crossplane-runtime. The idiomatic Rust equivalent is
-  serde: deserialize observed resources into your own structs (or use
-  `serde_json::Value::pointer` for ad hoc paths) via
-  `resource::struct_to_json`, and build desired state from any
-  `serde::Serialize` value via `resource::update`. Integral numbers survive
-  the protobuf Struct round-trip, so integer fields deserialize cleanly.
+  serde: deserialize an observed or desired resource - composite or
+  composed, they're both `Resource` - into your own struct with
+  `resource::get`, or use `resource::struct_to_json` plus
+  `serde_json::Value::pointer` for ad hoc paths. Build desired state from
+  any `serde::Serialize` value via `resource::update`. Integral numbers
+  survive the protobuf Struct round-trip, so integer fields deserialize
+  cleanly.
 - **Health is always on.** function-sdk-go's health service is opt-in
   (`WithHealthServer`); this SDK always serves the gRPC health API and
   reports the function as serving.

@@ -39,6 +39,10 @@ pub enum Error {
     #[error("the request has no function input")]
     MissingInput,
 
+    /// The resource has no JSON representation to deserialize.
+    #[error("the resource has no JSON representation")]
+    MissingResource,
+
     /// The listen address could not be parsed.
     #[error("cannot parse listen address: {0}")]
     InvalidAddress(#[from] std::net::AddrParseError),

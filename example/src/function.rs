@@ -12,6 +12,16 @@ use tonic::{Request, Response, Status};
 #[derive(Debug, Default)]
 pub struct Function;
 
+#[derive(serde::Deserialize)]
+struct Xr {
+    spec: XrSpec,
+}
+
+#[derive(serde::Deserialize)]
+struct XrSpec {
+    region: String,
+}
+
 #[tonic::async_trait]
 impl FunctionRunnerService for Function {
     async fn run_function(
@@ -34,17 +44,12 @@ impl FunctionRunnerService for Function {
             return Ok(Response::new(rsp));
         };
 
-        let observed_xr = req
-            .observed
-            .as_ref()
-            .and_then(|s| s.composite.as_ref())
-            .and_then(|r| r.resource.as_ref())
-            .map(resource::struct_to_json)
-            .unwrap_or_default();
-        let Some(region) = observed_xr.pointer("/spec/region").and_then(|v| v.as_str()) else {
+        let composite = req.observed.as_ref().and_then(|s| s.composite.as_ref());
+        let Ok(observed_xr) = resource::get::<Xr>(composite) else {
             response::fatal(&mut rsp, "invalid XR: spec.region is required");
             return Ok(Response::new(rsp));
         };
+        let region = observed_xr.spec.region;
 
         let desired = rsp.desired.get_or_insert_default();
         let bucket = desired.resources.entry("bucket".to_string()).or_default();
