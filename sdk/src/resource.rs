@@ -23,6 +23,22 @@ pub fn struct_to_json(s: &Struct) -> serde_json::Value {
     )
 }
 
+/// Deserializes a resource's JSON representation into a typed value.
+///
+/// Works for both the composite resource (XR) and composed resources - both
+/// are represented by [`Resource`]. Pass `req.observed.composite.as_ref()`
+/// for the observed XR, or `req.observed.resources.get(name)` for an
+/// observed composed resource; the desired equivalents (`rsp.desired...`)
+/// work the same way. Returns [`Error::MissingResource`] when `resource` is
+/// `None` or has no JSON representation set, for example a composed
+/// resource Crossplane has not yet observed.
+pub fn get<T: serde::de::DeserializeOwned>(resource: Option<&Resource>) -> Result<T, Error> {
+    let s = resource
+        .and_then(|r| r.resource.as_ref())
+        .ok_or(Error::MissingResource)?;
+    Ok(serde_json::from_value(struct_to_json(s))?)
+}
+
 /// Converts a JSON object to a protobuf Struct.
 pub fn json_to_struct(m: &serde_json::Map<String, serde_json::Value>) -> Struct {
     Struct {

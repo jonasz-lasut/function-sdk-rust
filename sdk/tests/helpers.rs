@@ -91,6 +91,60 @@ fn get_input_deserializes_typed_input() {
 }
 
 #[test]
+fn resource_get_deserializes_the_composite_resource() {
+    #[derive(serde::Deserialize)]
+    struct Spec {
+        region: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct Xr {
+        spec: Spec,
+    }
+
+    let req = fixture();
+    let composite = req.observed.as_ref().unwrap().composite.as_ref();
+    let xr: Xr = resource::get(composite).unwrap();
+    assert_eq!(xr.spec.region, "eu-central-1");
+
+    let missing = resource::get::<Xr>(None);
+    assert!(matches!(missing, Err(Error::MissingResource)));
+}
+
+#[test]
+fn resource_get_deserializes_composed_resources() {
+    #[derive(serde::Deserialize)]
+    struct ForProvider {
+        region: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct Spec {
+        #[serde(rename = "forProvider")]
+        for_provider: ForProvider,
+    }
+    #[derive(serde::Deserialize)]
+    struct Bucket {
+        spec: Spec,
+    }
+
+    let req: RunFunctionRequest = serde_json::from_str(
+        r#"{"observed": {"resources": {"bucket": {"resource": {
+            "apiVersion": "s3.aws.upbound.io/v1beta2",
+            "kind": "Bucket",
+            "spec": {"forProvider": {"region": "eu-central-1"}}
+        }}}}}"#,
+    )
+    .unwrap();
+    let resources = &req.observed.as_ref().unwrap().resources;
+
+    let bucket: Bucket = resource::get(resources.get("bucket")).unwrap();
+    assert_eq!(bucket.spec.for_provider.region, "eu-central-1");
+
+    // A composed resource Crossplane hasn't observed yet is absent from the map.
+    let missing = resource::get::<Bucket>(resources.get("nope"));
+    assert!(matches!(missing, Err(Error::MissingResource)));
+}
+
+#[test]
 fn context_keys_read_and_write() {
     let req = fixture();
     let environment = request::get_context_key(&req, context::KEY_ENVIRONMENT).unwrap();
