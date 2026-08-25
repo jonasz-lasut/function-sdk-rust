@@ -3,10 +3,6 @@
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
-use tonic::body::Body;
-use tonic::codegen::Service;
-use tonic::codegen::http;
-use tonic::server::NamedService;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 
 use crate::Error;
@@ -49,39 +45,6 @@ pub struct Args {
 /// reflection is enabled for both the v1 and v1alpha reflection APIs, and
 /// the gRPC health service reports the function as serving.
 pub async fn serve<F: FunctionRunnerService>(function: F, args: &Args) -> Result<(), Error> {
-    let mut function_service = FunctionRunnerServiceServer::new(function);
-    if let Some(size) = args.max_recv_message_size {
-        function_service = function_service.max_decoding_message_size(size);
-    }
-    serve_service(function_service, args).await
-}
-
-/// Like [`serve`], but serves any gRPC service in place of the generated
-/// FunctionRunnerService server, with the same spec-compliant transport:
-/// mTLS from `--tls-certs-dir` unless `--insecure`, v1 and v1alpha gRPC
-/// server reflection, the gRPC health service reporting the service (by its
-/// [`NamedService::NAME`]) as serving, and graceful shutdown on SIGTERM or
-/// SIGINT.
-///
-/// Use it when the generated server's prost codec is not enough - a runtime
-/// that must forward request bytes verbatim (prost drops fields newer than
-/// the generated types, so a transparent proxy needs its own codec), or a
-/// service wrapped for instrumentation. The service owns its own message
-/// decoding, so `--max-recv-message-size` is its business to enforce;
-/// [`Args::max_recv_message_size`] carries what the caller asked for.
-pub async fn serve_service<S>(service: S, args: &Args) -> Result<(), Error>
-where
-    S: Service<
-            http::Request<Body>,
-            Response = http::Response<Body>,
-            Error = std::convert::Infallible,
-        > + NamedService
-        + Clone
-        + Send
-        + Sync
-        + 'static,
-    S::Future: Send + 'static,
-{
     let address: SocketAddr = args.address.parse()?;
 
     let mut builder = Server::builder();
@@ -93,6 +56,11 @@ where
         builder = builder.tls_config(tls_config(dir)?)?;
     }
 
+    let mut function_service = FunctionRunnerServiceServer::new(function);
+    if let Some(size) = args.max_recv_message_size {
+        function_service = function_service.max_decoding_message_size(size);
+    }
+
     let reflection_v1 = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET)
         .build_v1()?;
@@ -101,12 +69,14 @@ where
         .build_v1alpha()?;
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
-    health_reporter.set_serving::<S>().await;
+    health_reporter
+        .set_serving::<FunctionRunnerServiceServer<F>>()
+        .await;
 
-    tracing::info!(%address, insecure = args.insecure, service = S::NAME, "serving");
+    tracing::info!(%address, insecure = args.insecure, "serving FunctionRunnerService");
 
     builder
-        .add_service(service)
+        .add_service(function_service)
         .add_service(health_service)
         .add_service(reflection_v1)
         .add_service(reflection_v1alpha)
