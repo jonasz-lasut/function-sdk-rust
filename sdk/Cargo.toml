@@ -1,0 +1,29 @@
+[package]
+name = "crossplane-function-sdk"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "A Rust SDK for writing Crossplane composition functions"
+repository = "https://github.com/jonasz-lasut/function-sdk-rust"
+readme = "README.md"
+keywords = ["crossplane", "kubernetes", "grpc"]
+categories = ["api-bindings"]
+
+[dependencies]
+tonic = { version = "0.14", features = ["tls-aws-lc"] }
+tonic-prost = "0.14"
+tonic-reflection = "0.14"
+prost = "0.14"
+pbjson = "0.9"
+pbjson-types = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+sha2 = "0.11"
+thiserror = "2"
+
+[dev-dependencies]
+tokio-test = "0.4"
