@@ -11,7 +11,9 @@ API. This crate provides:
   the tonic gRPC server and client.
 - `server` - a function-spec-compliant runtime: mTLS or insecure serving,
   gRPC server reflection, the gRPC health service, graceful shutdown, and
-  the standard CLI arguments.
+  the standard CLI arguments. `serve` runs a typed `FunctionRunnerService`;
+  `serve_service` runs any tonic service (a custom codec, an instrumented
+  wrapper) over the same transport.
 - `request`, `response`, `resource` - helpers for typed function input,
   context keys, required resources and schemas, credentials, capabilities,
   results, conditions, readiness, and desired resource updates from any
