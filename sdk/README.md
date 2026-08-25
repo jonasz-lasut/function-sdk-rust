@@ -12,8 +12,10 @@ API. This crate provides:
 - `server` - a function-spec-compliant runtime: mTLS or insecure serving,
   gRPC server reflection, the gRPC health service, graceful shutdown, and
   the standard CLI arguments. `serve` runs a typed `FunctionRunnerService`;
-  `serve_service` runs any tonic service (a custom codec, an instrumented
-  wrapper) over the same transport.
+  `serve_customized` builds the server from parts - the typed function or
+  any tonic service (a custom codec, an instrumented wrapper), further
+  services, reflection descriptors, and a health reporter the caller can
+  own to flip readiness after start-up work.
 - `request`, `response`, `resource` - helpers for typed function input,
   context keys, required resources and schemas, credentials, capabilities,
   results, conditions, readiness, and desired resource updates from any
