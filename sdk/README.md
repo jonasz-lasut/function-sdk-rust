@@ -1,4 +1,4 @@
-# crossplane-function-sdk
+# function-sdk-rust
 
 A Rust SDK for writing [Crossplane](https://www.crossplane.io)
 [composition functions](https://docs.crossplane.io/latest/composition/compositions/).

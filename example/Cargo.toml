@@ -4,10 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "An example Crossplane composition function built with crossplane-function-sdk"
+description = "An example Crossplane composition function built with function-sdk-rust"
 
 [dependencies]
-crossplane-function-sdk = { path = "../sdk" }
+function-sdk-rust = { path = "../sdk" }
 tonic = "0.14"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 clap = { version = "4", features = ["derive", "env"] }

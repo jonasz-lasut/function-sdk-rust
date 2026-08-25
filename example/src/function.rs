@@ -4,9 +4,9 @@
 //! whose API version comes from the function's input, mirroring the
 //! function-template-python example.
 
-use crossplane_function_sdk::proto::v1::function_runner_service_server::FunctionRunnerService;
-use crossplane_function_sdk::proto::v1::{RunFunctionRequest, RunFunctionResponse};
-use crossplane_function_sdk::{resource, response};
+use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerService;
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
+use function_sdk_rust::{resource, response};
 use tonic::{Request, Response, Status};
 
 #[derive(Debug, Default)]

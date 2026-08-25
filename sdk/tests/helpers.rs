@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use crossplane_function_sdk::proto::v1::{
+use function_sdk_rust::proto::v1::{
     Capability, Ready, RunFunctionRequest, RunFunctionResponse, Severity, Target,
 };
-use crossplane_function_sdk::{Error, context, request, resource, response};
+use function_sdk_rust::{Error, context, request, resource, response};
 
 fn fixture() -> RunFunctionRequest {
     serde_json::from_str(
@@ -108,7 +108,7 @@ fn context_keys_read_and_write() {
 
 #[test]
 fn set_ready_and_connection_details() {
-    let mut r = crossplane_function_sdk::proto::v1::Resource::default();
+    let mut r = function_sdk_rust::proto::v1::Resource::default();
     resource::set_ready(&mut r, Ready::True);
     resource::add_connection_detail(&mut r, "endpoint", "https://example.org");
 
@@ -147,7 +147,7 @@ fn update_overwrites_and_adds_top_level_fields() {
 
 #[test]
 fn update_rejects_non_objects() {
-    let mut r = crossplane_function_sdk::proto::v1::Resource::default();
+    let mut r = function_sdk_rust::proto::v1::Resource::default();
     assert!(resource::update(&mut r, &serde_json::json!(42)).is_err());
 }
 
