@@ -29,6 +29,11 @@ pub struct Args {
     /// Run without mTLS credentials. If set, --tls-certs-dir is ignored.
     #[arg(long, default_value_t = false)]
     pub insecure: bool,
+
+    /// Maximum size in bytes of gRPC messages the function accepts.
+    /// Defaults to the gRPC default of 4MB.
+    #[arg(long)]
+    pub max_recv_message_size: Option<usize>,
 }
 
 /// Starts a gRPC server and serves RunFunctionRequests until SIGTERM or
@@ -37,7 +42,8 @@ pub struct Args {
 /// Serves with mTLS from `--tls-certs-dir` (tls.crt and tls.key must be the
 /// function's PEM-encoded certificate and key; ca.crt a PEM-encoded CA used
 /// to authenticate Crossplane) unless `--insecure` is set. gRPC server
-/// reflection is enabled for both the v1 and v1alpha reflection APIs.
+/// reflection is enabled for both the v1 and v1alpha reflection APIs, and
+/// the gRPC health service reports the function as serving.
 pub async fn serve<F: FunctionRunnerService>(function: F, args: &Args) -> Result<(), Error> {
     let address: SocketAddr = args.address.parse()?;
 
@@ -50,6 +56,11 @@ pub async fn serve<F: FunctionRunnerService>(function: F, args: &Args) -> Result
         builder = builder.tls_config(tls_config(dir)?)?;
     }
 
+    let mut function_service = FunctionRunnerServiceServer::new(function);
+    if let Some(size) = args.max_recv_message_size {
+        function_service = function_service.max_decoding_message_size(size);
+    }
+
     let reflection_v1 = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET)
         .build_v1()?;
@@ -57,10 +68,16 @@ pub async fn serve<F: FunctionRunnerService>(function: F, args: &Args) -> Result
         .register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET)
         .build_v1alpha()?;
 
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
+    health_reporter
+        .set_serving::<FunctionRunnerServiceServer<F>>()
+        .await;
+
     tracing::info!(%address, insecure = args.insecure, "serving FunctionRunnerService");
 
     builder
-        .add_service(FunctionRunnerServiceServer::new(function))
+        .add_service(function_service)
+        .add_service(health_service)
         .add_service(reflection_v1)
         .add_service(reflection_v1alpha)
         .serve_with_shutdown(address, shutdown_signal())
