@@ -1,8 +1,7 @@
 name: Publish
 
 on:
-  push:
-    tags: ["v*.*.*"]
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
@@ -22,7 +21,7 @@ jobs:
 
       - name: Verify tag matches package version
         run: |
-          pkg_version=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name=="crossplane-function-sdk") | .version')
+          pkg_version=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name=="function-sdk-rust") | .version')
           tag_version=${GITHUB_REF_NAME#v}
           if [ "$pkg_version" != "$tag_version" ]; then
             echo "Tag $GITHUB_REF_NAME does not match sdk/Cargo.toml version $pkg_version" >&2
@@ -30,13 +29,13 @@ jobs:
           fi
 
       - name: Dry-run package build
-        run: cargo publish -p crossplane-function-sdk --dry-run
+        run: cargo publish -p function-sdk-rust --dry-run
 
       - uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
       - name: Publish to crates.io
-        run: cargo publish -p crossplane-function-sdk
+        run: cargo publish -p function-sdk-rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 

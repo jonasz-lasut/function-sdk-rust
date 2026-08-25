@@ -1,7 +1,7 @@
-use crossplane_function_sdk::proto::v1::function_runner_service_client::FunctionRunnerServiceClient;
-use crossplane_function_sdk::proto::v1::function_runner_service_server::FunctionRunnerService;
-use crossplane_function_sdk::proto::v1::{RequestMeta, RunFunctionRequest, RunFunctionResponse};
-use crossplane_function_sdk::{Args, response, serve};
+use function_sdk_rust::proto::v1::function_runner_service_client::FunctionRunnerServiceClient;
+use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerService;
+use function_sdk_rust::proto::v1::{RequestMeta, RunFunctionRequest, RunFunctionResponse};
+use function_sdk_rust::{Args, response, serve};
 use tonic::{Request, Response, Status};
 
 struct EchoFunction;
