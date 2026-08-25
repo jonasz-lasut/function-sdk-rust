@@ -41,8 +41,8 @@ pub fn to(req: &RunFunctionRequest, ttl: Duration) -> RunFunctionResponse {
 /// Returns the added result so a reason or target can be set on it:
 ///
 /// ```
-/// # use crossplane_function_sdk::proto::v1::{RunFunctionResponse, Target};
-/// # use crossplane_function_sdk::response;
+/// # use function_sdk_rust::proto::v1::{RunFunctionResponse, Target};
+/// # use function_sdk_rust::response;
 /// # let mut rsp = RunFunctionResponse::default();
 /// let result = response::normal(&mut rsp, "created the bucket");
 /// result.reason = Some("CreatedBucket".to_string());

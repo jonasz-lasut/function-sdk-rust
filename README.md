@@ -10,7 +10,7 @@ for working with requests and responses.
 
 ## Layout
 
-- `sdk/` - the `crossplane-function-sdk` crate.
+- `sdk/` - the `function-sdk-rust` crate.
   - `proto/v1/run_function.proto` - the vendored protocol definition.
   - `src/generated/` - checked-in code generated from the proto: prost types,
     the tonic gRPC server and client, protojson serde impls (pbjson), and the
@@ -23,9 +23,9 @@ for working with requests and responses.
 ## Writing a function
 
 ```rust
-use crossplane_function_sdk::proto::v1::function_runner_service_server::FunctionRunnerService;
-use crossplane_function_sdk::proto::v1::{RunFunctionRequest, RunFunctionResponse};
-use crossplane_function_sdk::{resource, response};
+use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerService;
+use function_sdk_rust::proto::v1::{RunFunctionRequest, RunFunctionResponse};
+use function_sdk_rust::{resource, response};
 use tonic::{Request, Response, Status};
 
 struct Function;
