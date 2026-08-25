@@ -1,0 +1,13 @@
+[workspace]
+resolver = "3"
+members = ["sdk", "codegen", "example"]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+
+# See https://github.com/johnthagen/min-sized-rust - function images should be small.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

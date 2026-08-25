@@ -1,0 +1,13 @@
+[package]
+name = "codegen"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Regenerates sdk/src/generated from the vendored proto. Run with: cargo run -p codegen"
+
+[dependencies]
+prost-build = "0.14"
+tonic-prost-build = "0.14"
+pbjson-build = "0.9"
+tempfile = "3"
