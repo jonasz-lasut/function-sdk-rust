@@ -5,7 +5,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::Error;
-use crate::proto::v1::Resource;
+use crate::proto::v1::{Ready, Resource};
 
 /// Converts a protobuf Struct to a JSON value.
 ///
@@ -104,6 +104,22 @@ pub fn update_status<T: Serialize + ?Sized>(r: &mut Resource, status: &T) -> Res
         r,
         &serde_json::json!({"status": serde_json::to_value(status)?}),
     )
+}
+
+/// Sets whether a desired resource should be considered ready.
+///
+/// Set `Ready::True` on a desired composed resource to mark it ready, or on
+/// the desired XR to override Crossplane's standard readiness detection.
+pub fn set_ready(r: &mut Resource, ready: Ready) {
+    r.ready = ready as i32;
+}
+
+/// Adds a connection detail to a resource.
+///
+/// Only meaningful on the desired XR of legacy (v1) XRs; Crossplane ignores
+/// desired connection details everywhere else.
+pub fn add_connection_detail(r: &mut Resource, key: impl Into<String>, value: impl Into<Vec<u8>>) {
+    r.connection_details.insert(key.into(), value.into());
 }
 
 /// A status condition of a resource.

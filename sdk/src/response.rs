@@ -8,9 +8,9 @@ use serde::Serialize;
 use crate::Error;
 use crate::proto::v1::{
     Condition, MatchLabels, Requirements, ResourceSelector, Result as FnResult, RunFunctionRequest,
-    RunFunctionResponse, SchemaSelector, Severity, Status, resource_selector,
+    RunFunctionResponse, SchemaSelector, Severity, Status, Target, resource_selector,
 };
-use crate::resource::json_to_struct;
+use crate::resource::{json_to_pb, json_to_struct};
 
 /// The default TTL for which a RunFunctionResponse may be cached.
 pub const DEFAULT_TTL: Duration = Duration::from_secs(60);
@@ -37,30 +37,47 @@ pub fn to(req: &RunFunctionRequest, ttl: Duration) -> RunFunctionResponse {
 }
 
 /// Adds a normal result to the response.
-pub fn normal(rsp: &mut RunFunctionResponse, message: impl Into<String>) {
-    add_result(rsp, Severity::Normal, message);
+///
+/// Returns the added result so a reason or target can be set on it:
+///
+/// ```
+/// # use crossplane_function_sdk::proto::v1::{RunFunctionResponse, Target};
+/// # use crossplane_function_sdk::response;
+/// # let mut rsp = RunFunctionResponse::default();
+/// let result = response::normal(&mut rsp, "created the bucket");
+/// result.reason = Some("CreatedBucket".to_string());
+/// result.target = Some(Target::CompositeAndClaim as i32);
+/// ```
+pub fn normal(rsp: &mut RunFunctionResponse, message: impl Into<String>) -> &mut FnResult {
+    add_result(rsp, Severity::Normal, message)
 }
 
 /// Adds a warning result to the response.
-pub fn warning(rsp: &mut RunFunctionResponse, message: impl Into<String>) {
-    add_result(rsp, Severity::Warning, message);
+pub fn warning(rsp: &mut RunFunctionResponse, message: impl Into<String>) -> &mut FnResult {
+    add_result(rsp, Severity::Warning, message)
 }
 
 /// Adds a fatal result to the response.
 ///
 /// The pipeline run is considered a failure and the first fatal result is
 /// returned as an error, but subsequent pipeline steps may still run.
-pub fn fatal(rsp: &mut RunFunctionResponse, message: impl Into<String>) {
-    add_result(rsp, Severity::Fatal, message);
+pub fn fatal(rsp: &mut RunFunctionResponse, message: impl Into<String>) -> &mut FnResult {
+    add_result(rsp, Severity::Fatal, message)
 }
 
-fn add_result(rsp: &mut RunFunctionResponse, severity: Severity, message: impl Into<String>) {
+fn add_result(
+    rsp: &mut RunFunctionResponse,
+    severity: Severity,
+    message: impl Into<String>,
+) -> &mut FnResult {
     rsp.results.push(FnResult {
         severity: severity as i32,
         message: message.into(),
         reason: None,
-        target: None,
+        // Explicitly target the XR by default, like function-sdk-go does.
+        target: Some(Target::Composite as i32),
     });
+    rsp.results.last_mut().expect("a result was just pushed")
 }
 
 /// Adds a True status condition to be applied to the XR.
@@ -170,6 +187,25 @@ pub fn require_schema(
 
 fn requirements(rsp: &mut RunFunctionResponse) -> &mut Requirements {
     rsp.requirements.get_or_insert_default()
+}
+
+/// Sets a function context value by key.
+///
+/// Crossplane passes the response's context to subsequent functions in the
+/// pipeline. [`to`] copies the request's context forward, so setting a key
+/// adds to what earlier pipeline steps wrote. See [`crate::context`] for
+/// well-known context keys.
+pub fn set_context_key<T: Serialize + ?Sized>(
+    rsp: &mut RunFunctionResponse,
+    key: impl Into<String>,
+    value: &T,
+) -> Result<(), Error> {
+    let v = serde_json::to_value(value)?;
+    rsp.context
+        .get_or_insert_default()
+        .fields
+        .insert(key.into(), json_to_pb(&v));
+    Ok(())
 }
 
 /// Sets the output of an operation function.
