@@ -2,7 +2,7 @@ use function_sdk_rust::proto::v1::function_runner_service_client::FunctionRunner
 use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerService;
 use function_sdk_rust::proto::v1::function_runner_service_server::FunctionRunnerServiceServer;
 use function_sdk_rust::proto::v1::{RequestMeta, RunFunctionRequest, RunFunctionResponse};
-use function_sdk_rust::{Args, response, serve, serve_service};
+use function_sdk_rust::{Args, response, serve, serve_service, serve_service_with_health};
 use tonic::{Request, Response, Status};
 
 struct EchoFunction;
@@ -156,6 +156,72 @@ async fn serve_service_serves_a_custom_service() {
         .into_inner();
     assert_eq!(
         status.status,
+        tonic_health::pb::health_check_response::ServingStatus::Serving as i32
+    );
+}
+
+#[tokio::test]
+async fn serve_service_with_health_hands_readiness_to_the_caller() {
+    let port = free_port();
+    let args = Args {
+        debug: false,
+        address: format!("127.0.0.1:{port}"),
+        tls_certs_dir: None,
+        insecure: true,
+        max_recv_message_size: None,
+    };
+    let service = FunctionRunnerServiceServer::new(EchoFunction);
+    let (health, server) = serve_service_with_health(service, &args)
+        .await
+        .expect("server must build");
+    tokio::spawn(server);
+
+    let mut client = connect_with_retry(port).await;
+
+    let channel = tonic::transport::Channel::from_shared(format!("http://127.0.0.1:{port}"))
+        .expect("valid URI")
+        .connect()
+        .await
+        .expect("health channel must connect");
+    let mut health_client = tonic_health::pb::health_client::HealthClient::new(channel);
+    let check =
+        |c: &mut tonic_health::pb::health_client::HealthClient<tonic::transport::Channel>| {
+            let mut c = c.clone();
+            async move {
+                c.check(tonic_health::pb::HealthCheckRequest {
+                    service: "apiextensions.fn.proto.v1.FunctionRunnerService".to_string(),
+                })
+                .await
+                .expect("health check must succeed")
+                .into_inner()
+                .status
+            }
+        };
+
+    // Not serving until the caller says so - but requests are answered:
+    // health is what probes read, not a gate.
+    assert_eq!(
+        check(&mut health_client).await,
+        tonic_health::pb::health_check_response::ServingStatus::NotServing as i32
+    );
+    let rsp = client
+        .run_function(RunFunctionRequest {
+            meta: Some(RequestMeta {
+                tag: "early".to_string(),
+                capabilities: vec![],
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("RunFunction must succeed while not serving")
+        .into_inner();
+    assert_eq!(rsp.results[0].message, "echo");
+
+    health
+        .set_serving::<FunctionRunnerServiceServer<EchoFunction>>()
+        .await;
+    assert_eq!(
+        check(&mut health_client).await,
         tonic_health::pb::health_check_response::ServingStatus::Serving as i32
     );
 }

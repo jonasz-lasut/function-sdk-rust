@@ -22,7 +22,7 @@ pub mod resource;
 pub mod response;
 pub mod server;
 
-pub use server::{Args, serve, serve_service};
+pub use server::{Args, HealthReporter, serve, serve_service, serve_service_with_health};
 
 /// Errors returned by the SDK.
 #[derive(Debug, thiserror::Error)]

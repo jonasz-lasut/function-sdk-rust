@@ -1,5 +1,6 @@
 //! A spec-compliant gRPC server runtime for composition functions.
 
+use std::future::Future;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
@@ -8,6 +9,7 @@ use tonic::codegen::Service;
 use tonic::codegen::http;
 use tonic::server::NamedService;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
+pub use tonic_health::server::HealthReporter;
 
 use crate::Error;
 use crate::proto::v1::function_runner_service_server::{
@@ -82,6 +84,61 @@ where
         + 'static,
     S::Future: Send + 'static,
 {
+    let (health_reporter, server) = serve_service_with_health(service, args).await?;
+    health_reporter.set_serving::<S>().await;
+    server.await
+}
+
+/// Like [`serve_service`], but hands back the gRPC health reporter next to
+/// the server future instead of reporting the service as serving up front.
+///
+/// The service starts as NOT SERVING; flip it with
+/// [`HealthReporter::set_serving`] once the function is ready - typically
+/// from a start-up task (warming caches, loading modules) running while the
+/// server already answers. Requests are served regardless of health status:
+/// health is what probes read, not a gate. Nothing listens until the
+/// returned future is awaited.
+///
+/// ```no_run
+/// # async fn example<S>(service: S, args: &function_sdk_rust::Args)
+/// # -> Result<(), function_sdk_rust::Error>
+/// # where S: tonic::codegen::Service<
+/// #         tonic::codegen::http::Request<tonic::body::Body>,
+/// #         Response = tonic::codegen::http::Response<tonic::body::Body>,
+/// #         Error = std::convert::Infallible,
+/// #     > + tonic::server::NamedService + Clone + Send + Sync + 'static,
+/// #     S::Future: Send + 'static,
+/// # {
+/// let (health, server) = function_sdk_rust::serve_service_with_health(service, args).await?;
+/// tokio::spawn(async move {
+///     // ... warm caches ...
+///     health.set_serving::<S>().await;
+/// });
+/// server.await
+/// # }
+/// ```
+pub async fn serve_service_with_health<S>(
+    service: S,
+    args: &Args,
+) -> Result<
+    (
+        HealthReporter,
+        impl Future<Output = Result<(), Error>> + use<S>,
+    ),
+    Error,
+>
+where
+    S: Service<
+            http::Request<Body>,
+            Response = http::Response<Body>,
+            Error = std::convert::Infallible,
+        > + NamedService
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S::Future: Send + 'static,
+{
     let address: SocketAddr = args.address.parse()?;
 
     let mut builder = Server::builder();
@@ -101,19 +158,21 @@ where
         .build_v1alpha()?;
 
     let (health_reporter, health_service) = tonic_health::server::health_reporter();
-    health_reporter.set_serving::<S>().await;
+    health_reporter.set_not_serving::<S>().await;
 
-    tracing::info!(%address, insecure = args.insecure, service = S::NAME, "serving");
-
-    builder
-        .add_service(service)
-        .add_service(health_service)
-        .add_service(reflection_v1)
-        .add_service(reflection_v1alpha)
-        .serve_with_shutdown(address, shutdown_signal())
-        .await?;
-
-    Ok(())
+    let insecure = args.insecure;
+    let server = async move {
+        tracing::info!(%address, insecure, service = S::NAME, "serving");
+        builder
+            .add_service(service)
+            .add_service(health_service)
+            .add_service(reflection_v1)
+            .add_service(reflection_v1alpha)
+            .serve_with_shutdown(address, shutdown_signal())
+            .await?;
+        Ok(())
+    };
+    Ok((health_reporter, server))
 }
 
 fn tls_config(dir: &Path) -> Result<ServerTlsConfig, Error> {
