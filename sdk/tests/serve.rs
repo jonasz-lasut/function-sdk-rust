@@ -28,6 +28,7 @@ async fn serve_handles_a_run_function_request() {
             address: format!("127.0.0.1:{port}"),
             tls_certs_dir: None,
             insecure: true,
+            max_recv_message_size: None,
         };
         serve(EchoFunction, &args).await.expect("serve must start");
     });
@@ -48,6 +49,24 @@ async fn serve_handles_a_run_function_request() {
 
     assert_eq!(rsp.meta.unwrap().tag, "smoke");
     assert_eq!(rsp.results[0].message, "echo");
+
+    let channel = tonic::transport::Channel::from_shared(format!("http://127.0.0.1:{port}"))
+        .expect("valid URI")
+        .connect()
+        .await
+        .expect("health channel must connect");
+    let mut health = tonic_health::pb::health_client::HealthClient::new(channel);
+    let status = health
+        .check(tonic_health::pb::HealthCheckRequest {
+            service: "apiextensions.fn.proto.v1.FunctionRunnerService".to_string(),
+        })
+        .await
+        .expect("health check must succeed")
+        .into_inner();
+    assert_eq!(
+        status.status,
+        tonic_health::pb::health_check_response::ServingStatus::Serving as i32
+    );
 }
 
 fn free_port() -> u16 {
