@@ -1,0 +1,52 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Verify tag matches package version
+        run: |
+          pkg_version=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name=="crossplane-function-sdk") | .version')
+          tag_version=${GITHUB_REF_NAME#v}
+          if [ "$pkg_version" != "$tag_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match sdk/Cargo.toml version $pkg_version" >&2
+            exit 1
+          fi
+
+      - name: Dry-run package build
+        run: cargo publish -p crossplane-function-sdk --dry-run
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish to crates.io
+        run: cargo publish -p crossplane-function-sdk
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
