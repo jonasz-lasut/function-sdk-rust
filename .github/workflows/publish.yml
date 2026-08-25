@@ -1,7 +1,15 @@
 name: Publish
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, e.g. 0.2.0 (must match sdk/Cargo.toml)"
+        required: true
+        type: string
+      message:
+        description: 'Tag message'
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,12 +27,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Verify tag matches package version
+      - name: Verify input matches package version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           pkg_version=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name=="function-sdk-rust") | .version')
-          tag_version=${GITHUB_REF_NAME#v}
-          if [ "$pkg_version" != "$tag_version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match sdk/Cargo.toml version $pkg_version" >&2
+          if [ "$pkg_version" != "$INPUT_VERSION" ]; then
+            echo "Input version $INPUT_VERSION does not match sdk/Cargo.toml version $pkg_version" >&2
             exit 1
           fi
 
@@ -46,6 +55,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+
+      - name: Create Tag
+        uses: negz/create-tag@8dce6c9d9b12d161abe01c02d2b03f19e2e9e9bb # v2
+        with:
+          version: ${{ github.event.inputs.version }}
+          message: ${{ github.event.inputs.message }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: v${{ inputs.version }}
           generate_release_notes: true
