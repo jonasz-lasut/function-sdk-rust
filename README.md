@@ -96,9 +96,13 @@ with a few deliberate differences:
 - **Graceful shutdown is built in.** The server drains in-flight requests on
   SIGTERM and SIGINT.
 - **No Prometheus metrics yet.** function-sdk-go serves gRPC server metrics
-  on `:8080` (`WithMetricsServer`). There is currently no maintained
-  tonic-compatible Prometheus layer for tonic 0.14, so metrics support is
-  deferred until one exists or a small tower layer is written here.
+  on `:8080` (`WithMetricsServer`). As of August 2026 there is no maintained
+  tonic-compatible Prometheus layer: the only purpose-built crate,
+  [tonic-prometheus-layer], is pinned to tonic 0.13 and lags tonic majors,
+  so depending on it would hold this SDK back. When metrics are needed the
+  plan is to hand-roll a small tower layer on [prometheus-client] (the
+  actively maintained official Rust client) with a `/metrics` endpoint,
+  rather than take that dependency.
 
 [crossplane]: https://www.crossplane.io
 [functions]: https://docs.crossplane.io/latest/composition/compositions/
@@ -106,3 +110,5 @@ with a few deliberate differences:
 [function-sdk-go]: https://github.com/crossplane/function-sdk-go
 [spec]: https://github.com/crossplane/crossplane/blob/main/contributing/specifications/functions.md
 [proto]: https://github.com/crossplane/crossplane/tree/main/proto/fn/v1
+[tonic-prometheus-layer]: https://crates.io/crates/tonic-prometheus-layer
+[prometheus-client]: https://crates.io/crates/prometheus-client
