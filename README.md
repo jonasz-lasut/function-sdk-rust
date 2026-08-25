@@ -73,6 +73,33 @@ The vendored proto's canonical source is
 [crossplane/crossplane/proto/fn/v1][proto]. Only the v1 API is supported,
 which requires Crossplane v1.17 or later.
 
+## Differences from function-sdk-go
+
+This SDK covers the same RunFunction protocol surface as [function-sdk-go],
+with a few deliberate differences:
+
+- **v1 only.** The v1beta1 compatibility service is not implemented.
+  Functions built with this SDK require Crossplane v1.17 or later; all older
+  versions are end of life.
+- **No typed composite/composed resource wrappers.** function-sdk-go wraps
+  resources in `composite.Unstructured`/`composed.Unstructured` with
+  fieldpath accessors (`GetString("spec.region")`) and Crossplane machinery
+  accessors, built on crossplane-runtime. The idiomatic Rust equivalent is
+  serde: deserialize observed resources into your own structs (or use
+  `serde_json::Value::pointer` for ad hoc paths) via
+  `resource::struct_to_json`, and build desired state from any
+  `serde::Serialize` value via `resource::update`. Integral numbers survive
+  the protobuf Struct round-trip, so integer fields deserialize cleanly.
+- **Health is always on.** function-sdk-go's health service is opt-in
+  (`WithHealthServer`); this SDK always serves the gRPC health API and
+  reports the function as serving.
+- **Graceful shutdown is built in.** The server drains in-flight requests on
+  SIGTERM and SIGINT.
+- **No Prometheus metrics yet.** function-sdk-go serves gRPC server metrics
+  on `:8080` (`WithMetricsServer`). There is currently no maintained
+  tonic-compatible Prometheus layer for tonic 0.14, so metrics support is
+  deferred until one exists or a small tower layer is written here.
+
 [crossplane]: https://www.crossplane.io
 [functions]: https://docs.crossplane.io/latest/composition/compositions/
 [function-sdk-python]: https://github.com/crossplane/function-sdk-python
