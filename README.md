@@ -97,14 +97,23 @@ with a few deliberate differences:
   reports the function as serving.
 - **Graceful shutdown is built in.** The server drains in-flight requests on
   SIGTERM and SIGINT.
-- **No Prometheus metrics yet.** function-sdk-go serves gRPC server metrics
-  on `:8080` (`WithMetricsServer`). As of August 2026 there is no maintained
-  tonic-compatible Prometheus layer: the only purpose-built crate,
-  [tonic-prometheus-layer], is pinned to tonic 0.13 and lags tonic majors,
-  so depending on it would hold this SDK back. When metrics are needed the
-  plan is to hand-roll a small tower layer on [prometheus-client] (the
-  actively maintained official Rust client) with a `/metrics` endpoint,
-  rather than take that dependency.
+- **Metrics are Go-compatible, served as OpenMetrics first.** Like
+  function-sdk-go, the server serves the gRPC server series on `:8080` at
+  `/metrics` (`--metrics-address`, empty disables):
+  `grpc_server_started_total`, `grpc_server_handled_total` (with
+  `grpc_code`), `grpc_server_msg_received_total` and
+  `grpc_server_msg_sent_total`, with the interceptor's exact names, labels
+  and help strings - dashboards built for Go functions work unchanged. As
+  in the Go SDK, only unary calls are counted (streaming reflection and
+  health `Watch` exist as permanently zero series), every served method is
+  pre-created at zero, and there is no handling-time histogram. The
+  exposition differs deliberately: OpenMetrics 1.0 is the main format
+  (readable beyond Prometheus), with the classic Prometheus text format
+  served to an `Accept` header that asks for it. Built on
+  [prometheus-client], the official OpenMetrics-native client - the only
+  purpose-built alternative, [tonic-prometheus-layer], is pinned to tonic
+  0.13 and would hold this SDK back. Since this SDK serves no v1beta1, the
+  v1beta1 series the Go SDK pre-created do not exist here.
 
 [crossplane]: https://www.crossplane.io
 [functions]: https://docs.crossplane.io/latest/composition/compositions/

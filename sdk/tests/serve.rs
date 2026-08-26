@@ -22,6 +22,7 @@ impl FunctionRunnerService for EchoFunction {
 #[tokio::test]
 async fn serve_handles_a_run_function_request() {
     let port = free_port();
+    let metrics_port = free_port();
     tokio::spawn(async move {
         let args = Args {
             debug: false,
@@ -29,6 +30,7 @@ async fn serve_handles_a_run_function_request() {
             tls_certs_dir: None,
             insecure: true,
             max_recv_message_size: None,
+            metrics_address: format!("127.0.0.1:{metrics_port}"),
         };
         serve(EchoFunction, &args).await.expect("serve must start");
     });
@@ -67,6 +69,89 @@ async fn serve_handles_a_run_function_request() {
         status.status,
         tonic_health::pb::health_check_response::ServingStatus::Serving as i32
     );
+
+    // The Go SDK's gRPC server series, served as OpenMetrics: one
+    // RunFunction started, received, handled OK and answered. The handled
+    // count lands when the response's trailers go out, which can trail the
+    // client seeing the response, so it is polled briefly.
+    const RUN_FUNCTION: &str = "grpc_type=\"unary\",grpc_service=\"apiextensions.fn.proto.v1.FunctionRunnerService\",grpc_method=\"RunFunction\"";
+    let mut om = String::new();
+    for _ in 0..50 {
+        om = http_get(metrics_port, None).await;
+        if om.contains(&format!(
+            "grpc_server_handled_total{{{RUN_FUNCTION},grpc_code=\"OK\"}} 1"
+        )) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        om.contains("application/openmetrics-text; version=1.0.0; charset=utf-8"),
+        "OpenMetrics is the main format: {om}"
+    );
+    assert!(om.trim_end().ends_with("# EOF"), "OpenMetrics body: {om}");
+    assert!(
+        om.contains(&format!("grpc_server_started_total{{{RUN_FUNCTION}}} 1")),
+        "started: {om}"
+    );
+    assert!(
+        om.contains(&format!(
+            "grpc_server_msg_received_total{{{RUN_FUNCTION}}} 1"
+        )),
+        "msg_received: {om}"
+    );
+    assert!(
+        om.contains(&format!(
+            "grpc_server_handled_total{{{RUN_FUNCTION},grpc_code=\"OK\"}} 1"
+        )),
+        "handled OK: {om}"
+    );
+    assert!(
+        om.contains(&format!("grpc_server_msg_sent_total{{{RUN_FUNCTION}}} 1")),
+        "msg_sent: {om}"
+    );
+    // The health Check above was counted too - the layer covers the whole
+    // router, like the Go SDK's server-wide interceptor.
+    assert!(
+        om.contains("grpc_server_started_total{grpc_type=\"unary\",grpc_service=\"grpc.health.v1.Health\",grpc_method=\"Check\"} 1"),
+        "health Check counted: {om}"
+    );
+    // InitializeMetrics parity: streaming methods exist as zero series and
+    // are never incremented (the Go interceptor was unary-only too).
+    assert!(
+        om.contains("grpc_server_started_total{grpc_type=\"server_stream\",grpc_service=\"grpc.health.v1.Health\",grpc_method=\"Watch\"} 0"),
+        "streaming methods stay zero: {om}"
+    );
+
+    // A scraper that asks for the classic Prometheus text format without
+    // accepting OpenMetrics gets it.
+    let classic = http_get(metrics_port, Some("text/plain; version=0.0.4")).await;
+    assert!(
+        classic.contains("text/plain; version=0.0.4"),
+        "classic on request: {classic}"
+    );
+    assert!(classic.contains("# TYPE grpc_server_started_total counter"));
+    assert!(!classic.contains("# EOF"));
+}
+
+async fn http_get(port: u16, accept: Option<&str>) -> String {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    for _ in 0..50 {
+        let Ok(mut conn) = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await else {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            continue;
+        };
+        let header = accept
+            .map(|a| format!("Accept: {a}\r\n"))
+            .unwrap_or_default();
+        conn.write_all(format!("GET /metrics HTTP/1.1\r\nHost: x\r\n{header}\r\n").as_bytes())
+            .await
+            .expect("write request");
+        let mut out = Vec::new();
+        let _ = conn.read_to_end(&mut out).await;
+        return String::from_utf8_lossy(&out).into_owned();
+    }
+    panic!("cannot connect to the metrics endpoint");
 }
 
 fn free_port() -> u16 {

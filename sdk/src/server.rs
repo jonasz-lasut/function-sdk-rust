@@ -34,6 +34,12 @@ pub struct Args {
     /// Defaults to the gRPC default of 4MB.
     #[arg(long)]
     pub max_recv_message_size: Option<usize>,
+
+    /// Address at which to serve metrics at /metrics (OpenMetrics 1.0, or
+    /// the classic Prometheus text format for an Accept header that asks
+    /// for it) - the Go SDK's default; empty disables them.
+    #[arg(long, env = "METRICS_ADDRESS", default_value = ":8080")]
+    pub metrics_address: String,
 }
 
 /// Starts a gRPC server and serves RunFunctionRequests until SIGTERM or
@@ -44,6 +50,11 @@ pub struct Args {
 /// to authenticate Crossplane) unless `--insecure` is set. gRPC server
 /// reflection is enabled for both the v1 and v1alpha reflection APIs, and
 /// the gRPC health service reports the function as serving.
+///
+/// Unless `--metrics-address` is empty, the gRPC server metrics the Go SDK
+/// serves (`grpc_server_started_total` and friends, same names and labels)
+/// are served there at /metrics - OpenMetrics 1.0 as the main format, the
+/// classic Prometheus text format for scrapers that ask for it.
 pub async fn serve<F: FunctionRunnerService>(function: F, args: &Args) -> Result<(), Error> {
     let address: SocketAddr = args.address.parse()?;
 
@@ -73,9 +84,25 @@ pub async fn serve<F: FunctionRunnerService>(function: F, args: &Args) -> Result
         .set_serving::<FunctionRunnerServiceServer<F>>()
         .await;
 
+    // The metrics endpoint runs beside the gRPC server, like the Go SDK's;
+    // a failure to serve it is logged, never the function's failure. The
+    // counting layer below is always installed - with the endpoint disabled
+    // the counts are simply never served, which is indistinguishable from
+    // the Go SDK installing no interceptor.
+    if !args.metrics_address.is_empty() {
+        crate::metrics::initialize();
+        let metrics_address = args.metrics_address.clone();
+        tokio::spawn(async move {
+            if let Err(e) = crate::metrics::serve(&metrics_address).await {
+                tracing::error!(error = %e, "cannot serve metrics");
+            }
+        });
+    }
+
     tracing::info!(%address, insecure = args.insecure, "serving FunctionRunnerService");
 
     builder
+        .layer(crate::metrics::MetricsLayer)
         .add_service(function_service)
         .add_service(health_service)
         .add_service(reflection_v1)
