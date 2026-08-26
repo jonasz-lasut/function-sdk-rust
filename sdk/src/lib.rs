@@ -14,6 +14,8 @@
 //!
 //! [`FunctionRunnerService`]: proto::v1::function_runner_service_server::FunctionRunnerService
 
+mod metrics;
+
 pub mod context;
 pub mod logging;
 pub mod proto;
